@@ -1,0 +1,1 @@
+1- A USER ERROR has occurred: Error while trying to create index for /mnt/sda3/ngs2-assign/ref/chr22.vcf. Error was: htsjdk.tribble.TribbleException: The provided VCF file is malformed at approximately line number 977822: Duplicate allele added to VariantContext: GGA
