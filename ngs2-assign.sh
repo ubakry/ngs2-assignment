@@ -76,7 +76,7 @@ done
 
 # Add [Read group information]
 mkdir -p ../GATK_results/picard_res
-for i in S1_L001;do
+for i in S1_L001 S2_L001;do
     SM=$(basename $i | cut -d"_" -f1)                                          ##sample ID
     LB=$i                                        ##library ID
     PL="Illumina"                                                           ##platform (e.g. illumina, solid)
@@ -89,5 +89,35 @@ for i in S1_L001;do
     picard MarkDuplicates I=../GATK_results/picard_res/${SM}_rg_added_sorted.bam O=../GATK_results/picard_res/${SM}_dedupped.bam  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=../GATK_results/picard_res/${SM}_output.metrics 
 done
 
+cd ../ref
+samtools fqidx chr22_with_ERCC92.fa 
+gatk CreateSequenceDictionary -R chr22_with_ERCC92.fa -O chr22_with_ERCC92.dict
+cd -
 
-gatk -T SplitNCigarReads -R ref.fasta -I dedupped.bam -o split.bam -rf ReassignOneMappingQuality -RMQF 255 -RMQT 60 -U ALLOW_N_CIGAR_READS
+# Split'N'Trim and reassign mapping qualities
+mkdir -p ../GATK_results/gatk_res
+for i in S1 S2;do
+    gatk SplitNCigarReads -R ../ref/chr22_with_ERCC92.fa -I ../GATK_results/picard_res/${i}_dedupped.bam -O ../GATK_results/gatk_res/${i}_split.bam
+done
+
+wget -P ../ref ftp://ftp.ensembl.org/pub/release-96/variation/vcf/homo_sapiens/homo_sapiens-chr22.vcf.gz
+
+cd ../ref
+gunzip -k homo_sapiens-chr22.vcf.gz 
+grep "^#" homo_sapiens-chr22.vcf > chr22.vcf
+grep "^22" homo_sapiens-chr22.vcf | sed 's/^22/chr22/' >> chr22.vcf
+gatk IndexFeatureFile -F chr22.vcf
+cd -
+
+for sample in S1 S2;do
+  name=${sample%.dedup.bam}
+
+  gatk --java-options "-Xmx2G" BaseRecalibrator \
+-R ../refdog_chr5.fa -I $sample --known-sites ../ref/chr22.vcf \
+-O $name.report
+
+  gatk --java-options "-Xmx2G" ApplyBQSR \
+-R dog_chr5.fa -I $sample -bqsr $name.report \
+-O $name.bqsr.bam --add-output-sam-program-record --emit-original-quals
+done
+
